@@ -225,6 +225,7 @@ fn print_data(data: JPEG)
                 }
                 print!("{} ",data.qtables[i].table[j]);
             }
+            print!("\n");
         }
         print!("\n");
     }
@@ -242,6 +243,38 @@ fn print_data(data: JPEG)
 
 }
 
+fn read_JPEG(bytes: &Vec<u8>,data: &mut JPEG)
+{
+    let mut i = 0;
+    while(bytes.len() > i+2)
+    {
+        let second = bytes[i+1];
+        if second == SOI
+        {
+            read_header(&bytes);
+            i = 2;
+            println!("Succesfully read JPEG header!\n");
+        }
+        else if second>=APP0 && second<=APP15
+        {
+            i = read_appn(&bytes);
+            println!("Succesfully read APPN section!\n");
+        }
+        else if second == DQT
+        {
+            i = read_q_tables(&bytes,i,data);
+            println!("Succesfully read Quantization tables!\n");
+        }
+        else if second == SOF
+        {
+            i = read_SOF_data(&bytes,i,data);
+            println!("Succesfully read SOF data!\n");
+            println!("Next bytes are: {:x} and {:x} and i is {}\n", bytes[i],bytes[i+1],i);
+            break;
+        }
+    }
+}
+
 fn main() {
     let args : Vec<String> = env::args().collect();
     let argc = args.len();
@@ -254,26 +287,8 @@ fn main() {
     
     let mut data = JPEG::new();
 
-    read_header(&bytes);
+    read_JPEG(&bytes,&mut data);
 
-    println!("Succesfully read JPEG header!\n");
-
-    let mut i = read_appn(&bytes);
-
-    //citanje se nastavlja od mesta i (pocev od njega)
-
-    println!("Succesfully read APPN section!\n");
-
-    i = read_q_tables(&bytes,i,&mut data);
-
-    println!("Succesfully read Quantization tables!\n");
-
-    i = read_SOF_data(&bytes,i,&mut data);
-
-    println!("Succesfully read SOF data!\n");
-
-    println!("Next bytes are: {:x} and {:x} and i is {}\n", bytes[i],bytes[i+1],i);
-    
     print_data(data);
 
 }
