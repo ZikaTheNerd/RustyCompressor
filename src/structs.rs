@@ -41,7 +41,8 @@ pub struct SOFdata
     pub height: u16,
     pub width: u16,
     pub numComp: u8,
-    pub Components: [Comp; 3]
+    pub Components: [Comp; 3],
+    pub zero_based: bool,
 }
 
 impl SOFdata
@@ -51,7 +52,28 @@ impl SOFdata
             height: 0,
             width: 0,
             numComp: 0,
-            Components: [Comp::new(),Comp::new(),Comp::new()]
+            Components: [Comp::new(),Comp::new(),Comp::new()],
+            zero_based: false, //mora false ali pokrivamo i pogresne jpeg fajlove
+        }
+    }
+}
+
+pub struct Huffman_table
+{
+    pub offsets: [u8; 17], // od kog do kog mesta su simboli odgovarajuce duzine
+    pub symbols: [u8; 162], 
+    pub set: bool,
+}
+
+impl Huffman_table
+{
+    pub fn new() -> Self
+    {
+        Huffman_table
+        {
+            offsets: [0; 17],
+            symbols: [0; 162],
+            set: false
         }
     }
 }
@@ -60,6 +82,9 @@ pub struct JPEG
 {
     pub qtables: [QTable; 4],
     pub sof_data: SOFdata,
+    pub restart_interval: u16,
+    pub huff_DC_tables: [Huffman_table; 4],
+    pub huff_AC_tables: [Huffman_table; 4],
 }
 
 impl JPEG
@@ -67,7 +92,10 @@ impl JPEG
     pub fn new() -> Self {
         JPEG {
             qtables: [QTable::new(),QTable::new(),QTable::new(),QTable::new()],
-            sof_data: SOFdata::new()
+            sof_data: SOFdata::new(),
+            restart_interval: 0,
+            huff_DC_tables: [Huffman_table::new(),Huffman_table::new(),Huffman_table::new(),Huffman_table::new()],
+            huff_AC_tables: [Huffman_table::new(),Huffman_table::new(),Huffman_table::new(),Huffman_table::new()],
         }
     }
 }

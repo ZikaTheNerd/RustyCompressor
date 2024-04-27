@@ -3,6 +3,8 @@ pub mod constants {
     pub const SOI: u8 = 0xD8;
     pub const DQT: u8 = 0xDB;
     pub const SOF: u8 = 0xC0;
+    pub const DRI: u8 = 0xDD;
+    pub const DHT: u8 = 0xC4;
 
     
     pub const APP0: u8 = 0xE0;

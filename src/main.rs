@@ -1,4 +1,6 @@
 use std::env;
+use std::env::consts::DLL_PREFIX;
+use std::f32::RADIX;
 use std::fs;
 
 mod constants;
@@ -188,8 +190,16 @@ fn read_SOF_data(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
     //component: ID,sampling factor,qtable id  (1,1,1 bytes)
     for j in 0..n
     {
-        let c_id = bytes[i];
+        let mut c_id = bytes[i];
         i+=1;
+        if c_id == 0 //ne sme ali pokusavamo da pokrijemo
+        {
+            data.sof_data.zero_based = true;
+        }
+        if data.sof_data.zero_based == true // popravljamo
+        {
+            c_id+=1;
+        }
         if c_id==0 || c_id>3
         {
             panic!("SOF error!\n");
@@ -209,14 +219,120 @@ fn read_SOF_data(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
     i
 }
 
+fn read_DRI_data(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
+{
+    let mut i=iterator;
+    if bytes.len()<6
+    {
+        panic!("DRI error!\n");
+    }
+    if bytes[i]!=0xFF || bytes[i+1]!=DRI
+    {
+        panic!("DRI error!\n");
+    }
+    i+=2;
+    let mut first=bytes[i];
+    i+=1;
+    let mut second=bytes[i];
+    i+=1;
+    let length = (first as u16) << 8 | second as u16;
+    if length != 4
+    {
+        panic!("DRI error!\n");
+    }
+    first=bytes[i];
+    i+=1;
+    second=bytes[i];
+    i+=1;
+    data.restart_interval = (first as u16) << 8 | second as u16;
+
+    i
+}
+
+fn read_Huffman_tables(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
+{
+    let mut i=iterator;
+    if bytes.len()<4
+    {
+        panic!("Huffman tables error!\n");
+    }
+    if bytes[i]!=0xFF || bytes[i+1]!=DHT
+    {
+        panic!("Huffman tables error!\n");
+    }
+    i+=2;
+    let mut first=bytes[i];
+    i+=1;
+    let mut second=bytes[i];
+    i+=1;
+    let length = (first as u16) << 8 | second as u16;
+    if bytes.len() < i + length as usize
+    {
+        panic!("Huffman tables error!\n");
+    }
+    let mut len = length as i32;
+    len-=2;
+    while len > 0
+    {
+        let tableInfo = bytes[i];
+        i+=1;
+        len-=1;
+        let tableID = (tableInfo & 0x0F) as usize;
+        let ifAC = tableInfo >> 4;  // 1 if ac, 0 if dc
+
+        if tableID > 3
+        {
+            panic!("Huffman tables error!\n");
+        }
+        let mut ht = Huffman_table::new();
+        ht.set = true;
+        ht.offsets[0] = 0;
+
+        let mut total: u8 = 0;
+        for j in 1..17
+        {
+            total+=bytes[i];
+            i+=1;
+            ht.offsets[j] = total;
+            if total > 162
+            {
+                panic!("Huffman tables error!\n");
+            }
+        }
+        len-=16;
+        for j in 0..total as usize
+        {
+            ht.symbols[j]=bytes[i];
+            i+=1;
+        }
+        len-=total as i32;
+
+        if ifAC == 0
+        {
+            data.huff_DC_tables[tableID] = ht;
+        }
+        else
+        {
+            data.huff_AC_tables[tableID] = ht;
+        }
+    }
+
+    if len!=0
+    {
+        panic!("Huffman tables error!\n");
+    }
+   
+    i
+}
+
 fn print_data(data: JPEG)
 {
-    println!("QTables:\n");
+    println!("QTables:");
     for i in 0..4
     {
         if data.qtables[i].set 
         {
-            print!("id: {}\n",i);
+            print!("id: {}",i);
             for j in 0..64
             {
                 if j%8==0
@@ -227,7 +343,6 @@ fn print_data(data: JPEG)
             }
             print!("\n");
         }
-        print!("\n");
     }
     
     println!("SOF data:");
@@ -240,6 +355,46 @@ fn print_data(data: JPEG)
         print!("Ver. samp. factor: {}\n",data.sof_data.Components[j].ver_sampling_factor);
         print!("QTable ID: {}\n",data.sof_data.Components[j].qtable_id);
     }
+
+    println!("DRI:");
+    println!("restart_interval: {}\n",data.restart_interval);
+
+    println!("Huffman DC tables:");
+    for j in 0..4
+    {
+        if data.huff_DC_tables[j].set == true
+        {
+            println!("DC table:{}\nSymbols:",j);
+            for k in 1..17
+            {
+                print!("{}: ",k);
+                for n in data.huff_DC_tables[j].offsets[k-1]..data.huff_DC_tables[j].offsets[k]
+                {
+                    print!("{:x} ",data.huff_DC_tables[j].symbols[n as usize]);
+                }
+                print!("\n");
+            }
+        }
+    }
+
+    println!("Huffman AC tables:");
+    for j in 0..4
+    {
+        if data.huff_AC_tables[j].set == true
+        {
+            println!("AC table:{}\nSymbols:",j);
+            for k in 1..17
+            {
+                print!("{}: ",k);
+                for n in data.huff_AC_tables[j].offsets[k-1]..data.huff_AC_tables[j].offsets[k]
+                {
+                    print!("{:x} ",data.huff_AC_tables[j].symbols[n as usize]);
+                }
+                print!("\n");
+            }
+        }
+    }
+
 
 }
 
@@ -269,6 +424,15 @@ fn read_JPEG(bytes: &Vec<u8>,data: &mut JPEG)
         {
             i = read_SOF_data(&bytes,i,data);
             println!("Succesfully read SOF data!\n");
+        }
+        else if second == DRI
+        {
+            i = read_DRI_data(&bytes,i,data);
+        }
+        else if second == DHT
+        {
+            i = read_Huffman_tables(&bytes,i,data);
+            println!("Succesfully read Huffman tables!\n");
             println!("Next bytes are: {:x} and {:x} and i is {}\n", bytes[i],bytes[i+1],i);
             break;
         }
