@@ -90,7 +90,7 @@ fn read_q_tables(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
         }
         data.qtables[tableID as usize].set=true;
         if table_size!=0
-        {//16-bit qtable (almost never happens)
+        {//16-bit qtable (skoro nikada se ne desava)
             /*let mut j=0;
             while j < 128{
                 data.qtables[tableID as usize].table[zigzag[j]]=((bytes[i+j] as u16)<<8) + (bytes[i+j+1] as u16);
@@ -125,6 +125,90 @@ fn read_q_tables(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
     i
 }
 
+fn read_SOF_data(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
+{
+    let mut i = iterator;
+    if bytes.len() < i+6
+    {
+        panic!("SOF error!\n");
+    }
+    let mut first = bytes[i];
+    i+=1;
+    let mut second = bytes[i];
+    i+=1;
+    if first != 0xFF || second != SOF
+    {
+        if first == 0xFF && second!=0xC4 && second!=0xC8 && second!=0xCC && (second & 0x0F)==0xC0
+        {
+            panic!("Not a baseline jpeg!\n")
+        }
+        else {
+            panic!("SOF error!\n");
+        }
+    }
+    first=bytes[i];
+    i+=1;
+    second=bytes[i];
+    i+=1;
+    let length= (first as u16) << 8 | second as u16;
+    if bytes.len() < i + (length as usize)
+    {
+        panic!("SOF error!\n");
+    }
+    let precission=bytes[i]; //not used
+    if precission != 8
+    {
+        panic!("SOF error!\n");
+    }
+    i+=1;
+    // width 2bytes
+    // heigth 2bytes
+    first=bytes[i];
+    i+=1;
+    second=bytes[i];
+    i+=1;
+    data.sof_data.height = (first as u16) << 8 | second as u16;
+    first=bytes[i];
+    i+=1;
+    second=bytes[i];
+    i+=1;
+    data.sof_data.width = (first as u16) << 8 | second as u16;
+    if data.sof_data.height==0 || data.sof_data.width==0
+    {
+        panic!("SOF error!\n");
+    }
+    // num of comp 1byte 1-greyscale, 3-ycbcr
+    let n = bytes[i];
+    data.sof_data.numComp = n;
+    i+=1;
+    if n>3 || n==0
+    {
+        panic!("SOF error!\n");
+    }
+    //component: ID,sampling factor,qtable id  (1,1,1 bytes)
+    for j in 0..n
+    {
+        let c_id = bytes[i];
+        i+=1;
+        if c_id==0 || c_id>3
+        {
+            panic!("SOF error!\n");
+        }
+        data.sof_data.Components[c_id as usize -1].set = true;
+        let sf = bytes[i];
+        i+=1;
+        data.sof_data.Components[c_id as usize -1].hor_sampling_factor = sf >> 4;
+        data.sof_data.Components[c_id as usize -1].ver_sampling_factor = sf & 0x0F;
+        data.sof_data.Components[c_id as usize -1].qtable_id = bytes[i];
+        i+=1;
+    }
+    if length != 8 + 3 * (data.sof_data.numComp as u16)  // dodatna provera....
+    {
+        panic!("SOF error!\n");
+    }
+    i
+}
+
 fn print_data(data: JPEG)
 {
     println!("QTables:\n");
@@ -132,6 +216,7 @@ fn print_data(data: JPEG)
     {
         if data.qtables[i].set 
         {
+            print!("id: {}\n",i);
             for j in 0..64
             {
                 if j%8==0
@@ -141,8 +226,20 @@ fn print_data(data: JPEG)
                 print!("{} ",data.qtables[i].table[j]);
             }
         }
-        print!("\n\n");
+        print!("\n");
     }
+    
+    println!("SOF data:");
+    println!("height: {}",data.sof_data.height);
+    println!("width: {}",data.sof_data.width);
+    for j in 0..data.sof_data.numComp as usize
+    {
+        print!("Component: {}\n",j+1);
+        print!("Hor. samp. factor: {}\n",data.sof_data.Components[j].hor_sampling_factor);
+        print!("Ver. samp. factor: {}\n",data.sof_data.Components[j].ver_sampling_factor);
+        print!("QTable ID: {}\n",data.sof_data.Components[j].qtable_id);
+    }
+
 }
 
 fn main() {
@@ -155,9 +252,7 @@ fn main() {
     let image_name = &args[1];
     let bytes = fs::read(image_name).expect("Was not able to read the file.\n");
     
-    let mut data = JPEG{
-        qtables: [QTable::new(),QTable::new(),QTable::new(),QTable::new()],
-    };
+    let mut data = JPEG::new();
 
     read_header(&bytes);
 
@@ -172,6 +267,10 @@ fn main() {
     i = read_q_tables(&bytes,i,&mut data);
 
     println!("Succesfully read Quantization tables!\n");
+
+    i = read_SOF_data(&bytes,i,&mut data);
+
+    println!("Succesfully read SOF data!\n");
 
     println!("Next bytes are: {:x} and {:x} and i is {}\n", bytes[i],bytes[i+1],i);
     
