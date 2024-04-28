@@ -21,7 +21,10 @@ pub struct Comp
     pub hor_sampling_factor: u8,
     pub ver_sampling_factor: u8,
     pub qtable_id: u8,
-    pub set: bool
+    pub huff_dc_id: u8,
+    pub huff_ac_id: u8,
+    pub set: bool,
+    pub used: bool
 }
 
 impl Comp
@@ -31,7 +34,10 @@ impl Comp
             hor_sampling_factor: 0,
             ver_sampling_factor: 0,
             qtable_id: 0,
-            set: false
+            huff_dc_id: 0,
+            huff_ac_id: 0,
+            set: false,
+            used: false
         }
     }
 }
@@ -43,6 +49,10 @@ pub struct SOFdata
     pub numComp: u8,
     pub Components: [Comp; 3],
     pub zero_based: bool,
+    pub sos: u8,
+    pub eos: u8,
+    pub sa_high: u8,
+    pub sa_low: u8,
 }
 
 impl SOFdata
@@ -54,6 +64,10 @@ impl SOFdata
             numComp: 0,
             Components: [Comp::new(),Comp::new(),Comp::new()],
             zero_based: false, //mora false ali pokrivamo i pogresne jpeg fajlove
+            sos: 0,
+            eos: 63,
+            sa_high: 0,
+            sa_low: 0,
         }
     }
 }
@@ -85,6 +99,7 @@ pub struct JPEG
     pub restart_interval: u16,
     pub huff_DC_tables: [Huffman_table; 4],
     pub huff_AC_tables: [Huffman_table; 4],
+    pub huff_data: Vec<u8>,
 }
 
 impl JPEG
@@ -96,6 +111,7 @@ impl JPEG
             restart_interval: 0,
             huff_DC_tables: [Huffman_table::new(),Huffman_table::new(),Huffman_table::new(),Huffman_table::new()],
             huff_AC_tables: [Huffman_table::new(),Huffman_table::new(),Huffman_table::new(),Huffman_table::new()],
+            huff_data: Vec::new(),
         }
     }
 }

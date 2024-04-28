@@ -23,34 +23,81 @@ fn read_header(bytes: &Vec<u8>)
     }
 }
 
-fn read_appn(bytes: &Vec<u8>) -> usize
+fn read_APPN(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
 {
-    let mut iterator = 2;
-    let mut first: u8 = 0;
-    let mut second: u8 = 0;
-    loop 
+    let mut i = iterator;
+    if bytes.len() < i + 4
     {
-        if bytes.len() < iterator+4
-        {
-            panic!("APPN error!\n");
-        }
-        first = bytes[iterator];
-        iterator+=1;
-        second = bytes[iterator];
-        iterator+=1;
-        if first != 0xFF || second<APP0 || second>APP15
-        {
-            iterator-=2;
-            break;
-        }
-        first = bytes[iterator];
-        iterator+=1;
-        second = bytes[iterator];
-        iterator+=1;
-        let length= (first as u16) << 8 | second as u16;
-        iterator+=(length as usize) - 2;
+        panic!("Comment error!\n");
     }
-    iterator
+    let mut first: u8 = bytes[i];
+    i+=1;
+    let mut second: u8 = bytes[i];
+    i+=1;
+    if first!=0xFF || second<APP0 || second>APP15
+    {
+        panic!("Comment error!\n");
+    }
+    first=bytes[i];
+    i+=1;
+    second=bytes[i];
+    i+=1;
+    let length= (first as u16) << 8 | second as u16;
+    i+=length as usize -2;
+    if bytes.len() < i
+    {
+        panic!("Comment error!\n");
+    }
+
+    i
+}
+
+fn read_TEM(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
+{
+    let mut i = iterator;
+    if bytes.len() < i + 2
+    {
+        panic!("TEM error!\n");
+    }
+    let first: u8 = bytes[i];
+    i+=1;
+    let second: u8 = bytes[i];
+    i+=1;
+    if first!=0xFF || second!=TEM
+    {
+        panic!("TEM error!\n");
+    }
+    
+    i
+}
+
+fn read_comment(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
+{
+    let mut i = iterator;
+    if bytes.len() < i + 4
+    {
+        panic!("Comment error!\n");
+    }
+    let mut first: u8 = bytes[i];
+    i+=1;
+    let mut second: u8 = bytes[i];
+    i+=1;
+    if first!=0xFF || second!=COM
+    {
+        panic!("Comment error!\n");
+    }
+    first=bytes[i];
+    i+=1;
+    second=bytes[i];
+    i+=1;
+    let length= (first as u16) << 8 | second as u16;
+    i+=length as usize -2;
+    if bytes.len() < i
+    {
+        panic!("Comment error!\n");
+    }
+
+    i
 }
 
 fn read_q_tables(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
@@ -325,6 +372,84 @@ fn read_Huffman_tables(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
     i
 }
 
+fn read_SOS(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
+{
+    let mut i=iterator;
+    if bytes.len() < i+4
+    {
+        panic!("SOS error!\n");
+    }
+    if data.sof_data.numComp == 0
+    {
+        panic!("SOS error!\n");
+    }
+    if bytes[i]!=0xFF || bytes[i+1]!=SOS
+    {
+        panic!("SOS error!\n");
+    }
+    i+=2;
+    let mut first=bytes[i];
+    i+=1;
+    let mut second=bytes[i];
+    i+=1;
+    let length = (first as u16) << 8 | second as u16;
+    if bytes.len() < i + length as usize
+    {
+        panic!("SOS error!\n");
+    }
+    //......
+    let numC = bytes[i];
+    i+=1;
+    for j in 0..numC as usize
+    {
+        let mut compID = bytes[i];
+        i+=1;
+        if data.sof_data.zero_based == true //opet ako je jpeg lose napravljen...
+        {
+            compID+=1;
+        }
+        if compID > data.sof_data.numComp
+        {
+            panic!("SOS error!\n");
+        }
+        let mut component = &mut data.sof_data.Components[compID as usize-1]; //radi preglednosti
+        if component.used == true
+        {
+            panic!("SOS error!\n");
+        }
+        component.used = true;
+        component.huff_dc_id = bytes[i] >> 4;
+        component.huff_ac_id = bytes[i] & 0x0F;
+        i+=1;
+        if component.huff_ac_id > 3 || component.huff_dc_id > 3
+        {
+            panic!("SOS error!\n");
+        }
+    }
+    data.sof_data.sos = bytes[i];
+    i+=1;
+    data.sof_data.eos = bytes[i];
+    i+=1;
+    data.sof_data.sa_high = bytes[i] >> 4;
+    data.sof_data.sa_low = bytes[i] & 0x0F;
+    i+=1;
+    if data.sof_data.sos !=0 || data.sof_data.eos !=63 // samo standradno radimo
+    {
+        panic!("SOS error!\n");
+    }
+    if data.sof_data.sa_high !=0 || data.sof_data.sa_low !=0 // samo standardno radimo
+    {
+        panic!("SOS error!\n");
+    }
+    if length != 6 + 2 * numC as u16
+    {
+        panic!("SOS error!\n");
+    }
+   
+    i
+}
+
+
 fn print_data(data: JPEG)
 {
     println!("QTables:");
@@ -394,25 +519,40 @@ fn print_data(data: JPEG)
             }
         }
     }
+    //...
+    println!("SOS data:");
+    println!("SOS: {}",data.sof_data.sos);
+    println!("EOS: {}",data.sof_data.eos);
+    println!("SA high: {}",data.sof_data.sa_high);
+    println!("SA low: {}",data.sof_data.sa_low);
+    println!("Color components:");
+    for j in 0..data.sof_data.numComp as usize
+    {
+        println!("Component ID: {}",j+1);
+        println!("DC table ID: {}",data.sof_data.Components[j].huff_dc_id);
+        println!("AC table ID: {}",data.sof_data.Components[j].huff_ac_id);
+    }
 
+    println!("Huffman bitstream size: {}",data.huff_data.len());
+
+    println!("Restart interval: {}",data.restart_interval);
 
 }
 
 fn read_JPEG(bytes: &Vec<u8>,data: &mut JPEG)
 {
     let mut i = 0;
+    read_header(&bytes);
+    i = 2;
+    println!("Succesfully read header!\n");
+
     while(bytes.len() > i+2)
     {
+        let first = bytes[i];
         let second = bytes[i+1];
-        if second == SOI
+        if second>=APP0 && second<=APP15 //unused markers
         {
-            read_header(&bytes);
-            i = 2;
-            println!("Succesfully read JPEG header!\n");
-        }
-        else if second>=APP0 && second<=APP15
-        {
-            i = read_appn(&bytes);
+            i = read_APPN(&bytes,i,data);
             println!("Succesfully read APPN section!\n");
         }
         else if second == DQT
@@ -433,10 +573,126 @@ fn read_JPEG(bytes: &Vec<u8>,data: &mut JPEG)
         {
             i = read_Huffman_tables(&bytes,i,data);
             println!("Succesfully read Huffman tables!\n");
-            println!("Next bytes are: {:x} and {:x} and i is {}\n", bytes[i],bytes[i+1],i);
+        }
+        else if second == SOS
+        {
+            i = read_SOS(&bytes,i,data);
+            println!("Succesfully read Start of scan!\n");
             break;
         }
+        else if second == COM //unused marker
+        {
+            i = read_comment(&bytes,i,data);
+            println!("Succesfully read a comment!\n");
+        }
+        else if (second >= JPG0 && second <= JPG13) ||
+        second == DNL || second == DHP || second == EXP //unused markers....
+        {
+            i = read_comment(&bytes,i,data);
+            println!("Succesfully read an unused marker!\n");
+        }
+        else if second == TEM //unused but doesn't have size
+        {
+            i = read_TEM(&bytes,i,data);
+            println!("Succesfully read an unused marker!\n");
+        }
+        else if first == 0xFF && second == 0xFF //allowed to skip
+        {
+            if bytes.len() > i+1
+            {
+                second == bytes[i];
+                i+=1;
+            }
+            else 
+            {
+                panic!("0xFF at the end of file!\n")    
+            }
+        }
+        else if second == SOI || second == EOI //forbidden or unsupported markers
+        || second == DAC || (second >= SOF1 && second <= SOF15)
+        || (second >= RST0 && second <= RST7)
+        {
+            panic!("Forbidden or unsupported marker!\n")
+        }
+        else 
+        {
+            panic!("Unknown marker!\n");
+        }   
     }
+    //end of loop
+        //only huffman bitstream left...
+        let mut first = bytes[i];
+        let mut second = first;
+        i+=1;
+        loop
+        {
+            if bytes.len() < i
+            {
+            panic!("File ended prematurely!\n");
+            }
+            first = second;
+            second = bytes[i];
+            i+=1;
+            // first and second ready....
+            if first == 0xFF //reading marker...
+            {
+                if second == EOI //end of image
+                {
+                    break;
+                }
+                else if second == 0x00 //FF included in bitstream and 00 ignored
+                {
+                    data.huff_data.push(first);
+                    if bytes.len() < i
+                    {
+                    panic!("File ended prematurely!\n");
+                    }
+                    second = bytes[i];
+                    i+=1;
+                }
+                else if second>=RST0 && second<=RST7 //ignored
+                {
+                    if bytes.len() < i
+                    {
+                    panic!("File ended prematurely!\n");
+                    }
+                    second = bytes[i];
+                    i+=1;
+                }
+                else if second == 0xFF //ignored
+                {
+                    continue;
+                }
+                else 
+                {
+                    panic!("Bitstream error!\n");
+                }
+            }
+            else //not reading a marker... 
+            {
+                data.huff_data.push(first);
+            }
+        }
+        //checking some errors....
+        if data.sof_data.numComp!=1 && data.sof_data.numComp!=3
+        {
+            panic!("Number of components not supported!\n");
+        }
+        for j in 0..data.sof_data.numComp as usize
+        {
+            if data.qtables[data.sof_data.Components[j].qtable_id as usize].set == false
+            {
+                panic!("QTable not set!\n");
+            }
+            if data.huff_AC_tables[data.sof_data.Components[j].huff_ac_id as usize].set == false
+            {
+                panic!("Huffman AC table not set!\n");
+            }
+            if data.huff_DC_tables[data.sof_data.Components[j].huff_dc_id as usize].set == false
+            {
+                panic!("Huffman DC table not set!\n");
+            }
+        }
 }
 
 fn main() {
