@@ -1,5 +1,3 @@
-
-pub mod constants {
     //used markers:
     pub const SOI: u8 = 0xD8;
     pub const DQT: u8 = 0xDB;
@@ -39,5 +37,5 @@ pub mod constants {
         53, 60, 61, 54, 47, 55, 62, 63
     ];
 
-}
+
 

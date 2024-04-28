@@ -1,5 +1,3 @@
-
-
 pub struct QTable
 {
     pub table: [u8; 64],
