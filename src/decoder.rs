@@ -444,7 +444,7 @@ fn read_SOS(bytes: &Vec<u8>,iterator: usize,data: &mut JPEG) -> usize
 }
 
 
-fn print_data(data: JPEG)
+fn print_data(data: &JPEG)
 {
     println!("QTables:");
     for i in 0..4
@@ -689,7 +689,7 @@ fn read_JPEG(bytes: &Vec<u8>,data: &mut JPEG)
         }
 }
 
-pub fn decode(image_name: &String) {
+pub fn decode(image_name: &String) -> JPEG {
     
     let bytes = fs::read(image_name).expect("Was not able to read the file.\n");
     
@@ -697,6 +697,8 @@ pub fn decode(image_name: &String) {
 
     read_JPEG(&bytes,&mut data);
 
-    print_data(data);
+    print_data(&data);
 
+
+    data
 }

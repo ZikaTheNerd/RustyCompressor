@@ -2,9 +2,11 @@ use std::env;
 
 mod structs;
 mod constants;
-
+mod bitmap;
 mod decoder;
+use bitmap::*;
 use decoder::decode;
+
 
 fn main()
 {
@@ -16,6 +18,11 @@ fn main()
 
     let image_name = &args[1];
 
-    decode(image_name);
+    let data = decode(image_name);
+
+    //TODO: finish decoding....
+    let MCUs = blackBox(&data);
+
+    makeBitmap(&data,MCUs,image_name);
 
 }

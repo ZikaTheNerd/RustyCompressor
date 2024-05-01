@@ -113,3 +113,12 @@ impl JPEG
         }
     }
 }
+
+pub struct rgbMCU
+{
+    pub r:[u8;64],
+    pub g:[u8;64],
+    pub b:[u8;64],
+}
+
+
