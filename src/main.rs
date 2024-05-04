@@ -4,8 +4,10 @@ mod structs;
 mod constants;
 mod bitmap;
 mod decoder;
+mod marker; 
 use bitmap::*;
 use decoder::decode;
+use markers::Marker::*;
 
 
 fn main()
